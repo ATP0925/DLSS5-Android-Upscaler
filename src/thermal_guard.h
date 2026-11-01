@@ -14,3 +14,4 @@ public:
     static float GetCurrentTemperatureCelsius();
     static bool ShouldBypassForCooling();
 };
+

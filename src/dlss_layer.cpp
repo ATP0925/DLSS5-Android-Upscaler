@@ -1,5 +1,7 @@
 #include "config_manager.h"
 #include "thermal_guard.h"
+#include "anti_cheat_guard.h"
+#include "crash_guard.h"
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 #include <android/log.h>
@@ -28,6 +30,25 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
     VkQueue queue,
     const VkPresentInfoKHR* pPresentInfo)
 {
+    // Retrieve device dispatch table immediately for fail-safe
+    void* dispatchKey = *reinterpret_cast<void**>(queue);
+    VkLayerDispatchTable* pTable = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_layerMutex);
+        auto it = g_deviceDispatchTables.find(dispatchKey);
+        if (it != g_deviceDispatchTables.end()) {
+            pTable = it->second;
+        }
+    }
+
+    // CRASH GUARD: If buffer validation fails, immediately pass through safely
+    if (!CrashGuard::ValidatePresentationBuffer(pPresentInfo)) {
+        if (pTable && pTable->QueuePresentKHR) {
+            return pTable->QueuePresentKHR(queue, pPresentInfo);
+        }
+        return VK_SUCCESS;
+    }
+
     g_frameCount++;
 
     // Thermal & Battery Check every 180 frames (~2-3 seconds at 60fps)
@@ -45,17 +66,6 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
              g_activeConfig.getScaleFactor());
     }
 
-    // Retrieve device dispatch table
-    void* dispatchKey = *reinterpret_cast<void**>(queue);
-    VkLayerDispatchTable* pTable = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_layerMutex);
-        auto it = g_deviceDispatchTables.find(dispatchKey);
-        if (it != g_deviceDispatchTables.end()) {
-            pTable = it->second;
-        }
-    }
-
     if (pTable && pTable->QueuePresentKHR) {
         return pTable->QueuePresentKHR(queue, pPresentInfo);
     }
@@ -71,6 +81,8 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
     VkDevice* pDevice)
 {
     g_activeConfig = ConfigManager::LoadFromAndroidProps();
+    AntiCheatGuard::EnforceProcessIsolation();
+    CrashGuard::ResetGuard();
 
     // Read current process name
     char processName[256] = "Unknown Game";

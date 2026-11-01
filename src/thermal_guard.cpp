@@ -58,3 +58,4 @@ ThermalStatus ThermalGuard::GetDeviceThermalState() {
 bool ThermalGuard::ShouldBypassForCooling() {
     return GetDeviceThermalState() == ThermalStatus::Critical;
 }
+
