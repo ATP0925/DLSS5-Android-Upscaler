@@ -6,16 +6,35 @@ Records real frame-times, jank rates, and SoC thermals via ADB without synthetic
 
 import subprocess
 import sys
+import os
+import shutil
 import time
 import re
 from datetime import datetime
 
+def find_adb():
+    found = shutil.which("adb")
+    if found:
+        return found
+    candidate_paths = [
+        os.path.expanduser("~/AppData/Local/Android/Sdk/platform-tools/adb.exe"),
+        "C:\\Users\\atpad\\AppData\\Local\\Android\\Sdk\\platform-tools\\adb.exe",
+        "/usr/bin/adb",
+        "/usr/local/bin/adb"
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p):
+            return p
+    return "adb"
+
+ADB_BIN = find_adb()
+
 def run_adb(cmd):
-    full_cmd = ["adb"] + cmd
+    full_cmd = [ADB_BIN] + cmd
     try:
         res = subprocess.run(full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         return res.stdout.strip()
-    except subprocess.CalledProcessError as e:
+    except Exception:
         return ""
 
 def get_device_info():
@@ -107,6 +126,18 @@ def benchmark_game(package_name, duration_seconds=15):
     print("[*] Verification methodology: FrameMetrics / dumpsys gfxinfo raw vsync delta.")
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ["--help", "-h", "help"]:
+        print("Usage: python benchmark_vsu.py [package_name] [duration_seconds]")
+        print("Example: python benchmark_vsu.py com.dts.freefiremax 15")
+        sys.exit(0)
+
+    devices = run_adb(["devices"])
+    lines = [l for l in devices.splitlines() if l.strip() and not l.startswith("List of devices")]
+    if not lines:
+        print("[!] No active ADB device detected. Please connect phone via USB or Wireless Debugging.")
+        print(f"[*] ADB binary detected: {ADB_BIN}")
+        sys.exit(1)
+
     pkg = sys.argv[1] if len(sys.argv) > 1 else "com.vsu.upscaler"
     sec = int(sys.argv[2]) if len(sys.argv) > 2 else 15
     benchmark_game(pkg, sec)
