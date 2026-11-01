@@ -19,3 +19,4 @@ target_link_libraries(vsu_test_runner PRIVATE
     log
     vulkan
 )
+
