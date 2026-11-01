@@ -32,26 +32,21 @@ This will generate `libVkLayer_dlss5.so`.
 
 ---
 
-## 🎮 Supported Games & Presets
+## 🌐 Universal Mode (Optimized For ALL Games)
 
-DLSS 5 works across all native Android games built on Vulkan / Unity / Unreal Engine:
+You **do not** need to configure games individually. DLSS 5 includes a **Universal Auto-Optimizer Daemon** that runs quietly on your phone, detects whichever game is in the foreground (Free Fire, Free Fire India, BGMI, COD Mobile, Genshin, CarX Street, etc.), and hooks the graphics pipeline instantly.
 
-| Game | Package Name | Alias |
-|---|---|---|
-| **Free Fire (Standard)** | `com.dts.freefireth` | `freefire` or `ff` |
-| **Free Fire MAX** | `com.dts.freefiremax` | `freefiremax` or `ffmax` |
-| **BGMI / PUBG Mobile** | `com.pubg.imobile` | `bgmi` or `pubg` |
-| **Genshin Impact** | `com.miHoYo.GenshinImpact` | `genshin` |
-| **COD Mobile** | `com.activision.callofduty.shooter` | `codm` |
-
-### 🎯 Free Fire One-Click Booster:
-```bash
-# For Free Fire Standard:
-adb shell /data/local/tmp/freefire.sh
-
-# For Free Fire MAX:
-adb shell /data/local/tmp/freefire.sh max
+### ⚡ 1-Step Universal Deployment:
+```powershell
+# Deploys and starts Universal DLSS 5 Daemon for ALL games
+.\build_and_deploy.ps1
 ```
+
+Or directly on device via ADB:
+```bash
+adb shell nohup /data/local/tmp/dlss5_universal_daemon.sh > /dev/null 2>&1 &
+```
+Whenever any game starts, the daemon hooks the layer and adapts upscale ratios automatically!
 
 ### Step 1: Push Layer & Manifest to Device
 ```bash

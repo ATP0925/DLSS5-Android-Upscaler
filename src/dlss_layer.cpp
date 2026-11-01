@@ -60,7 +60,21 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
     VkDevice* pDevice)
 {
     g_activeConfig = ConfigManager::LoadFromAndroidProps();
-    LOGI("[DLSS 5 Core] Initializing DLSS 5 Graphics Pipeline on Android Device...");
+
+    // Read current process name
+    char processName[256] = "Unknown Game";
+    FILE* cmdline = fopen("/proc/self/cmdline", "r");
+    if (cmdline) {
+        if (fgets(processName, sizeof(processName), cmdline)) {
+            // Trim null or newline
+            processName[sizeof(processName) - 1] = '\0';
+        }
+        fclose(cmdline);
+    }
+
+    LOGI("[DLSS 5 Universal] Attached to process: %s", processName);
+    LOGI("[DLSS 5 Universal] Mode: Scale %.2fx | Sharpness: %.2f | Auto-Optimizer: ON",
+         g_activeConfig.getScaleFactor(), g_activeConfig.sharpness);
 
     VkLayerDeviceCreateInfo* layerCreateInfo = const_cast<VkLayerDeviceCreateInfo*>(
         reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));

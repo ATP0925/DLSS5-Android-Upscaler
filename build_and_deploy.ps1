@@ -2,7 +2,8 @@
 # Requirements: Android NDK installed and ADB connected
 
 param (
-    [string]$TargetPackage = "freefire",
+    [string]$TargetPackage = "all",
+    [switch]$Universal = $true,
     [string]$NdkPath = $env:ANDROID_NDK_HOME
 )
 
@@ -68,12 +69,20 @@ if ($AdbDevices) {
     Write-Host "[+] Device connected. Pushing layer to /data/local/tmp..." -ForegroundColor Green
     adb push "$BuildDir/libVkLayer_dlss5.so" "/data/local/tmp/"
     adb push "$PSScriptRoot/manifest/VkLayer_dlss5.json" "/data/local/tmp/"
+    adb push "$PSScriptRoot/scripts/dlss5_universal_daemon.sh" "/data/local/tmp/"
     adb push "$PSScriptRoot/scripts/enable_dlss5.sh" "/data/local/tmp/"
+    adb shell chmod +x "/data/local/tmp/dlss5_universal_daemon.sh"
     adb shell chmod +x "/data/local/tmp/enable_dlss5.sh"
 
-    Write-Host "[*] Activating DLSS 5 on target: $TargetPackage" -ForegroundColor Cyan
-    adb shell "/data/local/tmp/enable_dlss5.sh" $TargetPackage
-    Write-Host "[SUCCESS] DLSS 5 is now active for $TargetPackage!" -ForegroundColor Green
+    if ($Universal -or $TargetPackage -eq "all") {
+        Write-Host "[*] Launching Universal Auto-Optimizer Daemon for ALL Android games..." -ForegroundColor Cyan
+        adb shell "nohup /data/local/tmp/dlss5_universal_daemon.sh > /dev/null 2>&1 &"
+        Write-Host "[SUCCESS] DLSS 5 Universal Engine is ACTIVE for ALL games (Free Fire, Free Fire India, BGMI, COD, etc.)!" -ForegroundColor Green
+    } else {
+        Write-Host "[*] Activating DLSS 5 on target: $TargetPackage" -ForegroundColor Cyan
+        adb shell "/data/local/tmp/enable_dlss5.sh" $TargetPackage
+        Write-Host "[SUCCESS] DLSS 5 is now active for $TargetPackage!" -ForegroundColor Green
+    }
 } else {
     Write-Warning "No device connected via ADB. Run this script with your phone connected to auto-deploy."
 }
