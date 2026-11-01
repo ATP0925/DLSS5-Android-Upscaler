@@ -27,3 +27,4 @@ void AntiCheatGuard::EnforceProcessIsolation() {
 const char* AntiCheatGuard::GetComplianceStatus() {
     return "VERIFIED_SAFE_POST_PROCESSOR";
 }
+

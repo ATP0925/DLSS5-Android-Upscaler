@@ -14,3 +14,4 @@ public:
     // Returns display compliance banner
     static const char* GetComplianceStatus();
 };
+

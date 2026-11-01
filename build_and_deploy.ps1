@@ -63,28 +63,38 @@ Pop-Location
 Write-Host "[+] Build Succeeded!" -ForegroundColor Green
 
 # 3. Check for Connected Android Device
-Write-Host "[*] Checking connected Android devices via ADB..." -ForegroundColor Yellow
-$AdbDevices = adb devices | Select-String "device$"
+$AdbBin = "adb"
+if (-not (Get-Command adb -ErrorAction SilentlyContinue)) {
+    $LocalSdkAdb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+    if (Test-Path $LocalSdkAdb) {
+        $AdbBin = $LocalSdkAdb
+    }
+}
+
+Write-Host "[*] Checking connected Android devices via ADB ($AdbBin)..." -ForegroundColor Yellow
+$AdbDevices = & $AdbBin devices | Select-String "device$"
 
 if ($AdbDevices) {
     Write-Host "[+] Device connected. Pushing layer to /data/local/tmp..." -ForegroundColor Green
-    adb push "$BuildDir/libVkLayer_dlss5.so" "/data/local/tmp/"
-    adb push "$PSScriptRoot/manifest/VkLayer_dlss5.json" "/data/local/tmp/"
-    adb push "$PSScriptRoot/scripts/dlss5_universal_daemon.sh" "/data/local/tmp/"
-    adb push "$PSScriptRoot/scripts/enable_dlss5.sh" "/data/local/tmp/"
-    adb shell chmod +x "/data/local/tmp/dlss5_universal_daemon.sh"
-    adb shell chmod +x "/data/local/tmp/enable_dlss5.sh"
+    & $AdbBin push "$BuildDir/libVkLayer_dlss5.so" "/data/local/tmp/"
+    & $AdbBin push "$PSScriptRoot/manifest/VkLayer_dlss5.json" "/data/local/tmp/"
+    & $AdbBin push "$PSScriptRoot/scripts/dlss5_universal_daemon.sh" "/data/local/tmp/"
+    & $AdbBin push "$PSScriptRoot/scripts/enable_dlss5.sh" "/data/local/tmp/"
+    & $AdbBin push "$PSScriptRoot/scripts/self_heal.sh" "/data/local/tmp/"
+    & $AdbBin shell chmod +x "/data/local/tmp/dlss5_universal_daemon.sh"
+    & $AdbBin shell chmod +x "/data/local/tmp/enable_dlss5.sh"
+    & $AdbBin shell chmod +x "/data/local/tmp/self_heal.sh"
 
     if ($Universal -or $TargetPackage -eq "all") {
         Write-Host "[*] Launching Universal Auto-Optimizer Daemon for ALL Android games..." -ForegroundColor Cyan
-        adb shell "nohup /data/local/tmp/dlss5_universal_daemon.sh > /dev/null 2>&1 &"
+        & $AdbBin shell "nohup /data/local/tmp/dlss5_universal_daemon.sh > /dev/null 2>&1 &"
         Write-Host "[SUCCESS] DLSS 5 Universal Engine is ACTIVE for ALL games (Free Fire, Free Fire India, BGMI, COD, etc.)!" -ForegroundColor Green
     } else {
         Write-Host "[*] Activating DLSS 5 on target: $TargetPackage" -ForegroundColor Cyan
-        adb shell "/data/local/tmp/enable_dlss5.sh" $TargetPackage
+        & $AdbBin shell "/data/local/tmp/enable_dlss5.sh" $TargetPackage
         Write-Host "[SUCCESS] DLSS 5 is now active for $TargetPackage!" -ForegroundColor Green
     }
 }
 else {
-    Write-Warning "No device connected via ADB. Run this script with your phone connected to auto-deploy."
+    Write-Warning "No device connected via ADB. Please connect your phone via USB with USB Debugging enabled."
 }

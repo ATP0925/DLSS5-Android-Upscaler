@@ -12,3 +12,4 @@ public:
     static bool IsSafeToExecute();
     static void ResetGuard();
 };
+

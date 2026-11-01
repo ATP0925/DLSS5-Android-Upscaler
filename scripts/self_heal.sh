@@ -37,3 +37,4 @@ setprop debug.dlss5.crash_count 0
 setprop debug.dlss5.status "HEALTHY"
 
 echo "[DLSS 5 HealthCheck] All files and layers validated. Integrity: 100% OK."
+

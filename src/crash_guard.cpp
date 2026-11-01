@@ -33,3 +33,4 @@ void CrashGuard::ResetGuard() {
     g_safeToExecute = true;
     g_consecutiveErrors = 0;
 }
+
