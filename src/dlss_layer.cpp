@@ -170,16 +170,8 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vsu_GetDeviceProcAddr(
 
 } // namespace
 
-// Vulkan Layer Manifest Negotiation Interface
+// Vulkan Layer Entry Points for Android
 extern "C" {
-
-VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL VK_LAYER_DLSS5_NegotiateLoaderDeviceInterfaceVersion(
-    VkNegotiateDeviceLayerInterface* pVersionStruct)
-{
-    pVersionStruct->pfnGetInstanceProcAddr = nullptr;
-    pVersionStruct->pfnGetDeviceProcAddr = vsu_GetDeviceProcAddr;
-    return VK_SUCCESS;
-}
 
 VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
     VkInstance instance,
