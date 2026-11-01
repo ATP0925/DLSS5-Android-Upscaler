@@ -38,10 +38,12 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
 
       - name: Build Android App APK
         run: |
-          gradle assembleDebug --no-daemon || echo "Gradle build attempted"
+          gradle assembleDebug --no-daemon
 
       - name: Upload Native Binaries & Test Harness
         uses: actions/upload-artifact@v4
