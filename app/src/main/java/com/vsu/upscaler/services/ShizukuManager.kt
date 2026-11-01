@@ -41,8 +41,8 @@ class ShizukuManager(private val context: Context) {
     }
 
     fun requestShizukuPermission() {
-        if (Shizuku.isPre_V11() || !Shizuku.pingBinder()) return
-        if (!Shizuku.checkSelfPermission().equals(PackageManager.PERMISSION_GRANTED)) {
+        if (!Shizuku.pingBinder()) return
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
             Shizuku.requestPermission(REQUEST_CODE_SHIZUKU)
         }
     }
