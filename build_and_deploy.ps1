@@ -19,7 +19,8 @@ if (-not $NdkPath -or -not (Test-Path $NdkPath)) {
         $Latest = Get-ChildItem -Path $PossibleNdk | Sort-Object Name -Descending | Select-Object -First 1
         $NdkPath = $Latest.FullName
         Write-Host "[+] Auto-detected NDK at: $NdkPath" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Error "Please install Android NDK or set \$env:ANDROID_NDK_HOME."
         exit 1
     }
@@ -35,17 +36,17 @@ Push-Location $BuildDir
 
 Write-Host "[*] Configuring CMake for arm64-v8a..." -ForegroundColor Yellow
 cmake -G "Ninja" `
-      -DCMAKE_TOOLCHAIN_FILE="$NdkPath/build/cmake/android.toolchain.cmake" `
-      -DANDROID_ABI="arm64-v8a" `
-      -DANDROID_PLATFORM="android-29" `
-      ..
+    -DCMAKE_TOOLCHAIN_FILE="$NdkPath/build/cmake/android.toolchain.cmake" `
+    -DANDROID_ABI="arm64-v8a" `
+    -DANDROID_PLATFORM="android-29" `
+    ..
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[*] Retrying with NMake / Standard generator..." -ForegroundColor Yellow
     cmake -DCMAKE_TOOLCHAIN_FILE="$NdkPath/build/cmake/android.toolchain.cmake" `
-          -DANDROID_ABI="arm64-v8a" `
-          -DANDROID_PLATFORM="android-29" `
-          ..
+        -DANDROID_ABI="arm64-v8a" `
+        -DANDROID_PLATFORM="android-29" `
+        ..
 }
 
 Write-Host "[*] Compiling libVkLayer_dlss5.so..." -ForegroundColor Yellow
@@ -83,6 +84,7 @@ if ($AdbDevices) {
         adb shell "/data/local/tmp/enable_dlss5.sh" $TargetPackage
         Write-Host "[SUCCESS] DLSS 5 is now active for $TargetPackage!" -ForegroundColor Green
     }
-} else {
+}
+else {
     Write-Warning "No device connected via ADB. Run this script with your phone connected to auto-deploy."
 }

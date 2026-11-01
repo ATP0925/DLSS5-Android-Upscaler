@@ -9,6 +9,7 @@ find_package(Vulkan REQUIRED)
 add_library(VkLayer_dlss5 SHARED
     src/dlss_layer.cpp
     src/config_manager.cpp
+    src/thermal_guard.cpp
 )
 
 target_include_directories(VkLayer_dlss5 PRIVATE

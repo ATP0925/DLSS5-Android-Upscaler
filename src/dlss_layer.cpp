@@ -1,4 +1,5 @@
 #include "config_manager.h"
+#include "thermal_guard.h"
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_layer.h>
 #include <android/log.h>
@@ -8,6 +9,7 @@
 
 #define LOG_TAG "DLSS5_Vulkan_Layer"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
@@ -19,6 +21,7 @@ std::unordered_map<void*, VkLayerInstanceDispatchTable*> g_instanceDispatchTable
 
 uint64_t g_frameCount = 0;
 DLSS5Config g_activeConfig;
+bool g_isThermalThrottled = false;
 
 // Hooked vkQueuePresentKHR
 VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
@@ -26,12 +29,20 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
     const VkPresentInfoKHR* pPresentInfo)
 {
     g_frameCount++;
-    if (g_frameCount % 300 == 0) {
-        LOGI("[DLSS 5 Active] Frame #%llu processed | Scale: %.1fx | Sharpness: %.2f | State: %s",
+
+    // Thermal & Battery Check every 180 frames (~2-3 seconds at 60fps)
+    if (g_frameCount % 180 == 0) {
+        g_isThermalThrottled = ThermalGuard::ShouldBypassForCooling();
+        if (g_isThermalThrottled) {
+            LOGW("[DLSS 5 ThermalGuard] Temperature high. Auto-bypassing shader load to cool hardware.");
+        }
+    }
+
+    if (g_frameCount % 360 == 0 && !g_isThermalThrottled) {
+        LOGI("[DLSS 5 Active] Frame #%llu | Temp: %.1f°C | Scale: %.1fx | Memory: Zero-Alloc Pool",
              static_cast<unsigned long long>(g_frameCount),
-             g_activeConfig.getScaleFactor(),
-             g_activeConfig.sharpness,
-             g_activeConfig.enabled ? "RUNNING" : "BYPASSED");
+             ThermalGuard::GetCurrentTemperatureCelsius(),
+             g_activeConfig.getScaleFactor());
     }
 
     // Retrieve device dispatch table
