@@ -57,3 +57,4 @@ typedef struct VkLayerInstanceDispatchTable_ {
 #ifdef __cplusplus
 }
 #endif
+
