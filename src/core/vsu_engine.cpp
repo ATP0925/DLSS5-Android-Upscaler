@@ -75,7 +75,7 @@ bool SpatialUpscalerEngine::Initialize(VkDevice device,
     poolInfo.maxSets = 4;
     poolInfo.poolSizeCount = 2;
     poolInfo.pPoolSizes = poolSizes;
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
     if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) {
         LOGE("Failed to create descriptor pool");
