@@ -1,0 +1,22 @@
+# Build directories
+build/
+bin/
+obj/
+*.so
+*.a
+*.o
+*.dll
+
+# Android / NDK artifacts
+.cxx/
+.externalNativeBuild/
+local.properties
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.bak
+
+# Temporary / Config files
+dlss5_active.conf

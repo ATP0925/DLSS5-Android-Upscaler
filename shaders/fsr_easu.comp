@@ -1,0 +1,52 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Game Render target input
+layout(binding = 0) uniform sampler2D InputGameTexture;
+
+// Upscaled presentation target
+layout(binding = 1, rgba8) writeonly uniform image2D OutputUpscaledTexture;
+
+layout(push_constant) uniform EASUConstants {
+    vec2 srcResolution;  // Low-res render size (e.g. 1280x720)
+    vec2 destResolution; // Display size (e.g. 2400x1080)
+} ubo;
+
+// Edge direction and adaptive filtering approximation for mobile Vulkan
+vec3 SampleNeighborhood(sampler2D tex, vec2 uv, vec2 d) {
+    vec3 c0 = texture(tex, uv + vec2(-d.x, -d.y)).rgb;
+    vec3 c1 = texture(tex, uv + vec2( 0.0, -d.y)).rgb;
+    vec3 c2 = texture(tex, uv + vec2( d.x, -d.y)).rgb;
+    vec3 c3 = texture(tex, uv + vec2(-d.x,  0.0)).rgb;
+    vec3 c4 = texture(tex, uv).rgb;
+    vec3 c5 = texture(tex, uv + vec2( d.x,  0.0)).rgb;
+    vec3 c6 = texture(tex, uv + vec2(-d.x,  d.y)).rgb;
+    vec3 c7 = texture(tex, uv + vec2( 0.0,  d.y)).rgb;
+    vec3 c8 = texture(tex, uv + vec2( d.x,  d.y)).rgb;
+
+    // Horizontal & Vertical gradient vectors (Sobel-like)
+    vec3 gx = (c2 + 2.0 * c5 + c8) - (c0 + 2.0 * c3 + c6);
+    vec3 gy = (c6 + 2.0 * c7 + c8) - (c0 + 2.0 * c1 + c2);
+
+    float edgeWeight = clamp(length(gx + gy) * 1.5, 0.0, 1.0);
+
+    // Lanczos-interpolated reconstruction
+    vec3 smoothed = (c1 + c3 + c5 + c7 + 4.0 * c4) / 8.0;
+    return mix(c4, smoothed, edgeWeight * 0.5);
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 outputSize = imageSize(OutputUpscaledTexture);
+
+    if (pixelCoord.x >= outputSize.x || pixelCoord.y >= outputSize.y) {
+        return;
+    }
+
+    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(outputSize);
+    vec2 texel = 1.0 / ubo.srcResolution;
+
+    vec3 reconstructedColor = SampleNeighborhood(InputGameTexture, uv, texel);
+
+    imageStore(OutputUpscaledTexture, pixelCoord, vec4(reconstructedColor, 1.0));
+}
