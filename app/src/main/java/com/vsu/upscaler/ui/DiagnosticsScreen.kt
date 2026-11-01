@@ -118,3 +118,4 @@ fun DiagnosticRow(label: String, value: String) {
         Text(text = value, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
+

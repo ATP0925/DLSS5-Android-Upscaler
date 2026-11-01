@@ -78,3 +78,4 @@ class ProfileRepository(context: Context) {
         prefs.edit().putString("profiles_json", array.toString()).apply()
     }
 }
+

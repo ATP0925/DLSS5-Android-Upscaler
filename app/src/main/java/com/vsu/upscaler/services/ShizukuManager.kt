@@ -74,3 +74,4 @@ class ShizukuManager(private val context: Context) {
         const val REQUEST_CODE_SHIZUKU = 1001
     }
 }
+

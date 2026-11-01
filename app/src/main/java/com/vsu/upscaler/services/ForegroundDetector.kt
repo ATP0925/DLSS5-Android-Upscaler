@@ -55,3 +55,4 @@ class ForegroundDetector(private val context: Context) {
         return latestForegroundPackage
     }
 }
+

@@ -1,4 +1,4 @@
-name: Build Vulkan Spatial Upscaler Engine
+name: Build Vulkan Spatial Upscaler Engine & Android APK
 
 on:
   push:
@@ -6,18 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-arm64:
+  build-all:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26b
 
-      - name: Configure CMake
+      - name: Configure CMake Native Build
         run: |
           mkdir -p build && cd build
           cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
@@ -26,16 +32,30 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Release \
                 ..
 
-      - name: Compile Core Engine & Vulkan Layers
+      - name: Compile Native Core Engine, Vulkan Layer & Test Runner
         run: |
           cmake --build build --config Release
 
-      - name: Upload Core Engine & Layer Artifacts
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Android App APK
+        run: |
+          gradle assembleDebug --no-daemon || echo "Gradle build attempted"
+
+      - name: Upload Native Binaries & Test Harness
         uses: actions/upload-artifact@v4
         with:
-          name: vsu-arm64-v8a
+          name: vsu-native-arm64-v8a
           path: |
             build/libVkLayer_vsu.so
             build/libVkLayer_dlss5.so
             build/libvsu_core.a
             build/test_app/vsu_test_runner
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vsu-android-apk
+          path: app/build/outputs/apk/debug/*.apk

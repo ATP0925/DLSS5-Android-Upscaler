@@ -41,3 +41,4 @@ class ThermalMonitor(context: Context) {
         }
     }
 }
+

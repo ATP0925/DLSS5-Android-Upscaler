@@ -36,3 +36,4 @@ data class DiagnosticTelemetry(
     val activeGamePackage: String? = null,
     val frameComputeLatencyMs: Float = 0.68f
 )
+

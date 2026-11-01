@@ -116,3 +116,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         shizukuManager.cleanup()
     }
 }
+
