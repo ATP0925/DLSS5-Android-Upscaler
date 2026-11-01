@@ -1,50 +1,56 @@
 #version 450
-precision mediump float; // Crucial for Mobile GPUs: Cuts power draw by ~45% and doubles ALU throughput
+precision mediump float;
 
+// 16x16 workgroup layout optimized for mobile tile-based GPUs (Adreno / Mali)
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout(binding = 0) uniform sampler2D InputGameTexture;
-layout(binding = 1, rgba8) writeonly uniform image2D OutputUpscaledTexture;
+layout(set = 0, binding = 0) uniform sampler2D InputTexture;
+layout(set = 0, binding = 1, rgba8) writeonly uniform image2D OutputTexture;
 
-layout(push_constant) uniform EASUConstants {
-    vec2 srcResolution;
-    vec2 destResolution;
-    float thermalScaleMod; // Dynamic thermal modifier (0.5 to 1.0)
-} ubo;
+layout(push_constant) uniform PushConstants {
+    float srcWidth;
+    float srcHeight;
+    float dstWidth;
+    float dstHeight;
+    float sharpness;
+    float scaleFactor;
+    uint flags;
+    uint reserved;
+} pc;
 
-// Mobile-Optimized 5-tap Cross-Kernel (Half-Precision Arithmetic)
-vec3 OptimizedMobileFilter(sampler2D tex, vec2 uv, vec2 d) {
+// Fast Edge-Adaptive Spatial Reconstruction (Mobile FP16 5-Tap Kernel)
+vec3 FilterEASU(sampler2D tex, vec2 uv, vec2 invSrcRes) {
     vec3 c = texture(tex, uv).rgb;
-    vec3 n = texture(tex, uv + vec2(0.0, -d.y)).rgb;
-    vec3 s = texture(tex, uv + vec2(0.0,  d.y)).rgb;
-    vec3 w = texture(tex, uv + vec2(-d.x, 0.0)).rgb;
-    vec3 e = texture(tex, uv + vec2( d.x, 0.0)).rgb;
+    vec3 n = texture(tex, uv + vec2(0.0, -invSrcRes.y)).rgb;
+    vec3 s = texture(tex, uv + vec2(0.0,  invSrcRes.y)).rgb;
+    vec3 w = texture(tex, uv + vec2(-invSrcRes.x, 0.0)).rgb;
+    vec3 e = texture(tex, uv + vec2( invSrcRes.x, 0.0)).rgb;
 
-    // Fast min/max bounding to eliminate ringing & artifacts
+    // Fast clamp bounds to prevent ringing
     vec3 minCol = min(c, min(min(n, s), min(w, e)));
     vec3 maxCol = max(c, max(max(n, s), max(w, e)));
 
-    // Edge gradient estimation
+    // Edge gradient estimation across color channels
     vec3 edge = abs((n + s) - (w + e));
     float edgeFactor = clamp(max(max(edge.r, edge.g), edge.b) * 2.0, 0.0, 0.5);
 
-    // Adaptive blend with zero branch penalty
+    // Dynamic directional blend
     vec3 smoothCol = (n + s + w + e + 4.0 * c) * 0.125;
-    return mix(smoothCol, c, edgeFactor);
+    return clamp(mix(smoothCol, c, edgeFactor), minCol, maxCol);
 }
 
 void main() {
-    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 outputSize = imageSize(OutputUpscaledTexture);
+    ivec2 outCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 outSize = imageSize(OutputTexture);
 
-    if (pixelCoord.x >= outputSize.x || pixelCoord.y >= outputSize.y) {
+    if (outCoord.x >= outSize.x || outCoord.y >= outSize.y) {
         return;
     }
 
-    vec2 uv = (vec2(pixelCoord) + 0.5) / vec2(outputSize);
-    vec2 texel = 1.0 / ubo.srcResolution;
+    vec2 uv = (vec2(outCoord) + 0.5) / vec2(outSize);
+    vec2 invSrcRes = vec2(1.0 / pc.srcWidth, 1.0 / pc.srcHeight);
 
-    vec3 finalColor = OptimizedMobileFilter(InputGameTexture, uv, texel);
+    vec3 reconstructed = FilterEASU(InputTexture, uv, invSrcRes);
 
-    imageStore(OutputUpscaledTexture, pixelCoord, vec4(finalColor, 1.0));
+    imageStore(OutputTexture, outCoord, vec4(reconstructed, 1.0));
 }

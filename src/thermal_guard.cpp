@@ -1,61 +1,81 @@
 #include "thermal_guard.h"
-#include <cstdio>
-#include <cstdlib>
 #include <android/log.h>
+#include <dlfcn.h>
 
-#define LOG_TAG "DLSS5_ThermalGuard"
+#define LOG_TAG "VSU_ThermalGuard"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 
 namespace {
-    const char* THERMAL_PATHS[] = {
-        "/sys/class/thermal/thermal_zone0/temp",
-        "/sys/class/thermal/thermal_zone1/temp",
-        "/sys/class/power_supply/battery/temp"
-    };
-}
+    // Dynamic function signatures for Android 10+ (API 29+) AThermal NDK APIs
+    typedef void* (*pfn_AThermal_acquireManager)();
+    typedef void (*pfn_AThermal_releaseManager)(void*);
+    typedef int (*pfn_AThermal_getCurrentThermalStatus)(void*);
 
-float ThermalGuard::GetCurrentTemperatureCelsius() {
-    for (const char* path : THERMAL_PATHS) {
-        FILE* fp = fopen(path, "r");
-        if (fp) {
-            int rawTemp = 0;
-            if (fscanf(fp, "%d", &rawTemp) == 1) {
-                fclose(fp);
-                if (rawTemp > 1000) {
-                    // Millidegrees Celsius (e.g. 41000 -> 41.0°C)
-                    return static_cast<float>(rawTemp) / 1000.0f;
-                } else if (rawTemp > 100) {
-                    // Tenths of a degree (e.g. 410 -> 41.0°C)
-                    return static_cast<float>(rawTemp) / 10.0f;
-                } else if (rawTemp > 0) {
-                    return static_cast<float>(rawTemp);
-                }
-            } else {
-                fclose(fp);
+    void* g_thermalManager = nullptr;
+    pfn_AThermal_acquireManager fn_acquire = nullptr;
+    pfn_AThermal_releaseManager fn_release = nullptr;
+    pfn_AThermal_getCurrentThermalStatus fn_getStatus = nullptr;
+    bool g_ndkThermalInitialized = false;
+
+    void InitNDKThermal() {
+        if (g_ndkThermalInitialized) return;
+        g_ndkThermalInitialized = true;
+
+        void* libandroid = dlopen("libandroid.so", RTLD_NOW | RTLD_LOCAL);
+        if (libandroid) {
+            fn_acquire = (pfn_AThermal_acquireManager)dlsym(libandroid, "AThermal_acquireManager");
+            fn_release = (pfn_AThermal_releaseManager)dlsym(libandroid, "AThermal_releaseManager");
+            fn_getStatus = (pfn_AThermal_getCurrentThermalStatus)dlsym(libandroid, "AThermal_getCurrentThermalStatus");
+
+            if (fn_acquire && fn_getStatus) {
+                g_thermalManager = fn_acquire();
+                LOGI("Initialized NDK AThermalManager successfully (SELinux-compliant)");
             }
         }
     }
-    // Safe default if sysfs is restricted on non-root
-    return 36.0f;
+}
+
+float ThermalGuard::GetCurrentTemperatureCelsius() {
+    InitNDKThermal();
+
+    if (g_thermalManager && fn_getStatus) {
+        int status = fn_getStatus(g_thermalManager);
+        // Map AThermalStatus enum to representative SoC temperature bands
+        switch (status) {
+            case 0: return 34.0f; // NONE
+            case 1: return 37.0f; // LIGHT
+            case 2: return 40.0f; // MODERATE
+            case 3: return 43.0f; // SEVERE
+            case 4: return 46.0f; // CRITICAL
+            case 5: return 49.0f; // EMERGENCY
+            case 6: return 52.0f; // SHUTDOWN
+            default: return 36.0f;
+        }
+    }
+
+    return 36.0f; // Default baseline
 }
 
 ThermalStatus ThermalGuard::GetDeviceThermalState() {
-    float temp = GetCurrentTemperatureCelsius();
+    InitNDKThermal();
 
-    if (temp >= 45.0f) {
-        LOGW("[DLSS 5 ThermalGuard] CRITICAL HEAT (%.1f°C)! Auto-Bypassing to prevent hardware strain.", temp);
-        return ThermalStatus::Critical;
-    } else if (temp >= 42.0f) {
-        LOGI("[DLSS 5 ThermalGuard] Device Hot (%.1f°C). Throttling down shader passes.", temp);
-        return ThermalStatus::Hot;
-    } else if (temp >= 38.0f) {
-        return ThermalStatus::Warm;
+    if (g_thermalManager && fn_getStatus) {
+        int status = fn_getStatus(g_thermalManager);
+        if (status >= 4) { // CRITICAL, EMERGENCY, SHUTDOWN
+            LOGW("AThermal reports CRITICAL heat status (%d)! Initiating compute bypass.", status);
+            return ThermalStatus::Critical;
+        } else if (status >= 3) { // SEVERE
+            return ThermalStatus::Hot;
+        } else if (status >= 1) { // LIGHT, MODERATE
+            return ThermalStatus::Warm;
+        }
+        return ThermalStatus::Cool;
     }
+
     return ThermalStatus::Cool;
 }
 
 bool ThermalGuard::ShouldBypassForCooling() {
     return GetDeviceThermalState() == ThermalStatus::Critical;
 }
-

@@ -171,3 +171,4 @@ comparison.save(paths["repo_split"])
 
 print("[SUCCESS] All screenshots and visual comparisons generated successfully!")
 print("Saved to:", paths["split"])
+

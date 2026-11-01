@@ -2,35 +2,35 @@
 #include "thermal_guard.h"
 #include "anti_cheat_guard.h"
 #include "crash_guard.h"
+#include "core/vsu_engine.h"
 #include <vulkan/vulkan.h>
 #include "vulkan/vk_layer.h"
 #include <android/log.h>
 #include <cstring>
 #include <unordered_map>
+#include <memory>
 #include <mutex>
 
-#define LOG_TAG "DLSS5_Vulkan_Layer"
+#define LOG_TAG "VSU_Layer"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
-// Dispatch table pointers
 std::mutex g_layerMutex;
 std::unordered_map<void*, VkLayerDispatchTable*> g_deviceDispatchTables;
-std::unordered_map<void*, VkLayerInstanceDispatchTable*> g_instanceDispatchTables;
+std::unordered_map<VkDevice, std::unique_ptr<vsu::SpatialUpscalerEngine>> g_deviceEngines;
 
 uint64_t g_frameCount = 0;
 DLSS5Config g_activeConfig;
 bool g_isThermalThrottled = false;
 
 // Hooked vkQueuePresentKHR
-VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vsu_QueuePresentKHR(
     VkQueue queue,
     const VkPresentInfoKHR* pPresentInfo)
 {
-    // Retrieve device dispatch table immediately for fail-safe
     void* dispatchKey = *reinterpret_cast<void**>(queue);
     VkLayerDispatchTable* pTable = nullptr;
     {
@@ -41,7 +41,6 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
         }
     }
 
-    // CRASH GUARD: If buffer validation fails, immediately pass through safely
     if (!CrashGuard::ValidatePresentationBuffer(pPresentInfo)) {
         if (pTable && pTable->QueuePresentKHR) {
             return pTable->QueuePresentKHR(queue, pPresentInfo);
@@ -51,21 +50,12 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
 
     g_frameCount++;
 
-    // Thermal & Battery Check every 180 frames (~2-3 seconds at 60fps)
-    if (g_frameCount % 180 == 0) {
+    // Check thermal status every 120 frames (~2 seconds at 60Hz)
+    if (g_frameCount % 120 == 0) {
         g_isThermalThrottled = ThermalGuard::ShouldBypassForCooling();
-        if (g_isThermalThrottled) {
-            LOGW("[DLSS 5 ThermalGuard] Temperature high. Auto-bypassing shader load to cool hardware.");
-        }
     }
 
-    if (g_frameCount % 360 == 0 && !g_isThermalThrottled) {
-        LOGI("[DLSS 5 Active] Frame #%llu | Temp: %.1f°C | Scale: %.1fx | Memory: Zero-Alloc Pool",
-             static_cast<unsigned long long>(g_frameCount),
-             ThermalGuard::GetCurrentTemperatureCelsius(),
-             g_activeConfig.getScaleFactor());
-    }
-
+    // Pass through to native presentation
     if (pTable && pTable->QueuePresentKHR) {
         return pTable->QueuePresentKHR(queue, pPresentInfo);
     }
@@ -74,7 +64,7 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_QueuePresentKHR(
 }
 
 // Hooked vkCreateDevice
-VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
+VKAPI_ATTR VkResult VKAPI_CALL vsu_CreateDevice(
     VkPhysicalDevice physicalDevice,
     const VkDeviceCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
@@ -83,21 +73,6 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
     g_activeConfig = ConfigManager::LoadFromAndroidProps();
     AntiCheatGuard::EnforceProcessIsolation();
     CrashGuard::ResetGuard();
-
-    // Read current process name
-    char processName[256] = "Unknown Game";
-    FILE* cmdline = fopen("/proc/self/cmdline", "r");
-    if (cmdline) {
-        if (fgets(processName, sizeof(processName), cmdline)) {
-            // Trim null or newline
-            processName[sizeof(processName) - 1] = '\0';
-        }
-        fclose(cmdline);
-    }
-
-    LOGI("[DLSS 5 Universal] Attached to process: %s", processName);
-    LOGI("[DLSS 5 Universal] Mode: Scale %.2fx | Sharpness: %.2f | Auto-Optimizer: ON",
-         g_activeConfig.getScaleFactor(), g_activeConfig.sharpness);
 
     VkLayerDeviceCreateInfo* layerCreateInfo = const_cast<VkLayerDeviceCreateInfo*>(
         reinterpret_cast<const VkLayerDeviceCreateInfo*>(pCreateInfo->pNext));
@@ -109,7 +84,7 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
     }
 
     if (!layerCreateInfo) {
-        LOGE("[DLSS 5 Core] Unable to locate loader device link info!");
+        LOGE("Unable to locate loader device link info");
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
@@ -134,14 +109,19 @@ VKAPI_ATTR VkResult VKAPI_CALL dlss5_CreateDevice(
     {
         std::lock_guard<std::mutex> lock(g_layerMutex);
         g_deviceDispatchTables[dispatchKey] = dispatchTable;
+
+        // Instantiate isolated VSU core engine for this device
+        auto engine = std::make_unique<vsu::SpatialUpscalerEngine>();
+        engine->Initialize(*pDevice, physicalDevice, VK_NULL_HANDLE, 0);
+        g_deviceEngines[*pDevice] = std::move(engine);
     }
 
-    LOGI("[DLSS 5 Core] Hooked vkQueuePresentKHR. DLSS 5 Engine is ready.");
+    LOGI("VSU Core Engine linked to VkDevice %p", *pDevice);
     return VK_SUCCESS;
 }
 
 // Hooked vkDestroyDevice
-VKAPI_ATTR void VKAPI_CALL dlss5_DestroyDevice(
+VKAPI_ATTR void VKAPI_CALL vsu_DestroyDevice(
     VkDevice device,
     const VkAllocationCallbacks* pAllocator)
 {
@@ -155,6 +135,7 @@ VKAPI_ATTR void VKAPI_CALL dlss5_DestroyDevice(
             pTable = it->second;
             g_deviceDispatchTables.erase(it);
         }
+        g_deviceEngines.erase(device);
     }
 
     if (pTable) {
@@ -163,34 +144,52 @@ VKAPI_ATTR void VKAPI_CALL dlss5_DestroyDevice(
     }
 }
 
-} // namespace
-
-// Intercept entry points
-extern "C" {
-
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL dlss5_GetDeviceProcAddr(VkDevice device, const char* pName) {
-    if (strcmp(pName, "vkGetDeviceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_GetDeviceProcAddr);
-    if (strcmp(pName, "vkCreateDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_CreateDevice);
-    if (strcmp(pName, "vkDestroyDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_DestroyDevice);
-    if (strcmp(pName, "vkQueuePresentKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_QueuePresentKHR);
+// Layer function intercept table
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vsu_GetDeviceProcAddr(
+    VkDevice device,
+    const char* pName)
+{
+    if (strcmp(pName, "vkGetDeviceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vsu_GetDeviceProcAddr);
+    if (strcmp(pName, "vkDestroyDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vsu_DestroyDevice);
+    if (strcmp(pName, "vkQueuePresentKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vsu_QueuePresentKHR);
 
     void* dispatchKey = *reinterpret_cast<void**>(device);
-    std::lock_guard<std::mutex> lock(g_layerMutex);
-    auto it = g_deviceDispatchTables.find(dispatchKey);
-    if (it != g_deviceDispatchTables.end() && it->second->GetDeviceProcAddr) {
-        return it->second->GetDeviceProcAddr(device, pName);
+    {
+        std::lock_guard<std::mutex> lock(g_layerMutex);
+        auto it = g_deviceDispatchTables.find(dispatchKey);
+        if (it != g_deviceDispatchTables.end() && it->second->GetDeviceProcAddr) {
+            return it->second->GetDeviceProcAddr(device, pName);
+        }
     }
     return nullptr;
 }
 
-VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL dlss5_GetInstanceProcAddr(VkInstance instance, const char* pName) {
-    if (strcmp(pName, "vkGetInstanceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_GetInstanceProcAddr);
-    if (strcmp(pName, "vkGetDeviceProcAddr") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_GetDeviceProcAddr);
-    if (strcmp(pName, "vkCreateDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_CreateDevice);
-    if (strcmp(pName, "vkQueuePresentKHR") == 0) return reinterpret_cast<PFN_vkVoidFunction>(dlss5_QueuePresentKHR);
+} // namespace
 
+// Vulkan Layer Manifest Negotiation Interface
+extern "C" {
+
+VK_LAYER_EXPORT VKAPI_ATTR VkResult VKAPI_CALL VK_LAYER_DLSS5_NegotiateLoaderDeviceInterfaceVersion(
+    VkNegotiateDeviceLayerInterface* pVersionStruct)
+{
+    pVersionStruct->pfnGetInstanceProcAddr = nullptr;
+    pVersionStruct->pfnGetDeviceProcAddr = vsu_GetDeviceProcAddr;
+    return VK_SUCCESS;
+}
+
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
+    VkInstance instance,
+    const char* pName)
+{
+    if (strcmp(pName, "vkCreateDevice") == 0) return reinterpret_cast<PFN_vkVoidFunction>(vsu_CreateDevice);
     return nullptr;
 }
 
+VK_LAYER_EXPORT VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(
+    VkDevice device,
+    const char* pName)
+{
+    return vsu_GetDeviceProcAddr(device, pName);
 }
 
+} // extern "C"
