@@ -30,3 +30,4 @@ const size_t CAS_COMP_SPV_SIZE = sizeof(CAS_COMP_SPV);
 
 } // namespace shaders
 } // namespace vsu
+

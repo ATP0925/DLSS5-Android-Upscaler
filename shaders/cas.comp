@@ -54,3 +54,4 @@ void main() {
 
     imageStore(OutputTexture, outCoord, vec4(sharpened, 1.0));
 }
+

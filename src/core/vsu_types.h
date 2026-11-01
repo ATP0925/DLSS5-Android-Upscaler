@@ -41,3 +41,4 @@ struct IntermediateImage {
 };
 
 } // namespace vsu
+

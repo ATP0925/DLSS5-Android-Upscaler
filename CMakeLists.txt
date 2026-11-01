@@ -109,3 +109,6 @@ set_target_properties(VkLayer_dlss5 PROPERTIES
     PREFIX "lib"
     SUFFIX ".so"
 )
+
+# 4. Standalone Test Harness (Verification App)
+add_subdirectory(test_app)

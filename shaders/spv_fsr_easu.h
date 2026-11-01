@@ -30,3 +30,4 @@ const size_t EASU_COMP_SPV_SIZE = sizeof(EASU_COMP_SPV);
 
 } // namespace shaders
 } // namespace vsu
+

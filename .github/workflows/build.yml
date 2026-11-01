@@ -38,3 +38,4 @@ jobs:
             build/libVkLayer_vsu.so
             build/libVkLayer_dlss5.so
             build/libvsu_core.a
+            build/test_app/vsu_test_runner
