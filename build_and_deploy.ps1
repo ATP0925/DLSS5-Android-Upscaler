@@ -2,7 +2,7 @@
 # Requirements: Android NDK installed and ADB connected
 
 param (
-    [string]$TargetPackage = "com.pubg.imobile",
+    [string]$TargetPackage = "freefire",
     [string]$NdkPath = $env:ANDROID_NDK_HOME
 )
 

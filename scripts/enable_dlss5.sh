@@ -4,6 +4,25 @@
 
 TARGET_APP="$1"
 
+# Friendly game aliases
+case "$TARGET_APP" in
+    freefire|ff)
+        TARGET_APP="com.dts.freefireth"
+        ;;
+    freefiremax|ffmax)
+        TARGET_APP="com.dts.freefiremax"
+        ;;
+    bgmi|pubg)
+        TARGET_APP="com.pubg.imobile"
+        ;;
+    genshin)
+        TARGET_APP="com.miHoYo.GenshinImpact"
+        ;;
+    codm|cod)
+        TARGET_APP="com.activision.callofduty.shooter"
+        ;;
+esac
+
 if [ -z "$TARGET_APP" ]; then
     echo "=========================================================="
     echo " DLSS 5 Android Game Hook Activation"

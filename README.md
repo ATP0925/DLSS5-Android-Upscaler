@@ -32,7 +32,26 @@ This will generate `libVkLayer_dlss5.so`.
 
 ---
 
-## 📲 How to Deploy on Android Phone
+## 🎮 Supported Games & Presets
+
+DLSS 5 works across all native Android games built on Vulkan / Unity / Unreal Engine:
+
+| Game | Package Name | Alias |
+|---|---|---|
+| **Free Fire (Standard)** | `com.dts.freefireth` | `freefire` or `ff` |
+| **Free Fire MAX** | `com.dts.freefiremax` | `freefiremax` or `ffmax` |
+| **BGMI / PUBG Mobile** | `com.pubg.imobile` | `bgmi` or `pubg` |
+| **Genshin Impact** | `com.miHoYo.GenshinImpact` | `genshin` |
+| **COD Mobile** | `com.activision.callofduty.shooter` | `codm` |
+
+### 🎯 Free Fire One-Click Booster:
+```bash
+# For Free Fire Standard:
+adb shell /data/local/tmp/freefire.sh
+
+# For Free Fire MAX:
+adb shell /data/local/tmp/freefire.sh max
+```
 
 ### Step 1: Push Layer & Manifest to Device
 ```bash
